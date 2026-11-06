@@ -1,0 +1,37 @@
+{
+  "Comment": "Order pipeline: validate, hold large orders for review, then reserve stock and charge the card in parallel.",
+  "StartAt": "Validate",
+  "States": {
+    "Validate": {"Type": "Task", "Resource": "validate_order", "ResultPath": "$.check", "Next": "IsLarge"},
+    "IsLarge": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.check.total", "NumericGreaterThan": 1000, "Next": "ReviewHold"}],
+      "Default": "Fulfil"
+    },
+    "ReviewHold": {"Type": "Wait", "Seconds": 1, "Next": "Fulfil"},
+    "Fulfil": {
+      "Type": "Parallel",
+      "Parameters": {"lines.$": "$.lines", "total.$": "$.check.total", "card_failures.$": "$.card_failures"},
+      "Branches": [
+        {"StartAt": "Reserve", "States": {"Reserve": {"Type": "Task", "Resource": "reserve_inventory", "End": true}}},
+        {"StartAt": "Charge", "States": {"Charge": {
+          "Type": "Task",
+          "Resource": "charge_card",
+          "TimeoutSeconds": 10,
+          "Retry": [{"ErrorEquals": ["Transient"], "IntervalSeconds": 0.2, "BackoffRate": 2, "MaxAttempts": 4, "JitterStrategy": "FULL"}],
+          "End": true
+        }}}
+      ],
+      "ResultPath": "$.fulfilment",
+      "Next": "Receipt"
+    },
+    "Receipt": {
+      "Type": "Task",
+      "Resource": "send_receipt",
+      "Parameters": {"email.$": "$.email"},
+      "ResultPath": "$.receipt",
+      "OutputPath": "$",
+      "End": true
+    }
+  }
+}

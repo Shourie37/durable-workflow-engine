@@ -1,0 +1,50 @@
+{
+  "Comment": "Trip booking saga: book flight, hotel, and car. On failure, undo completed bookings in reverse order.",
+  "StartAt": "BookFlight",
+  "States": {
+    "BookFlight": {
+      "Type": "Task",
+      "Resource": "book_flight",
+      "ResultPath": "$.flight",
+      "Retry": [{"ErrorEquals": ["Transient"], "IntervalSeconds": 0.2, "BackoffRate": 2, "MaxAttempts": 3}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "TripFailed"}],
+      "Next": "BookHotel"
+    },
+    "BookHotel": {
+      "Type": "Task",
+      "Resource": "book_hotel",
+      "ResultPath": "$.hotel",
+      "Retry": [{"ErrorEquals": ["Transient"], "IntervalSeconds": 0.2, "BackoffRate": 2, "MaxAttempts": 3}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "CancelFlight"}],
+      "Next": "BookCar"
+    },
+    "BookCar": {
+      "Type": "Task",
+      "Resource": "book_car",
+      "ResultPath": "$.car",
+      "Retry": [{"ErrorEquals": ["Transient"], "IntervalSeconds": 0.2, "BackoffRate": 2, "MaxAttempts": 3}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "CancelHotel"}],
+      "Next": "TripBooked"
+    },
+    "TripBooked": {"Type": "Succeed"},
+    "CancelHotel": {
+      "Type": "Task",
+      "Resource": "cancel_hotel",
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.ALL"], "IntervalSeconds": 0.2, "MaxAttempts": 10}],
+      "Next": "CancelFlight"
+    },
+    "CancelFlight": {
+      "Type": "Task",
+      "Resource": "cancel_flight",
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.ALL"], "IntervalSeconds": 0.2, "MaxAttempts": 10}],
+      "Next": "TripFailed"
+    },
+    "TripFailed": {
+      "Type": "Fail",
+      "Error": "TripBookingFailed",
+      "Cause": "A booking step failed. Completed bookings were cancelled."
+    }
+  }
+}

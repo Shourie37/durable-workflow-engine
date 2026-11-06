@@ -1,0 +1,33 @@
+{
+  "Comment": "Run one analysis per item, at most 4 at a time. Tolerate up to 25% failed items and report them.",
+  "StartAt": "AnalyzeAll",
+  "States": {
+    "AnalyzeAll": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "MaxConcurrency": 4,
+      "ToleratedFailurePercentage": 25,
+      "ItemProcessor": {
+        "StartAt": "Analyze",
+        "States": {
+          "Analyze": {
+            "Type": "Task",
+            "Resource": "analyze_item",
+            "Retry": [{"ErrorEquals": ["Transient"], "IntervalSeconds": 0.1, "MaxAttempts": 2}],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.results",
+      "Catch": [{"ErrorEquals": ["States.ExceedToleratedFailureThreshold"], "ResultPath": "$.error", "Next": "TooManyFailures"}],
+      "Next": "Summarize"
+    },
+    "Summarize": {
+      "Type": "Task",
+      "Resource": "summarize",
+      "Parameters": {"items.$": "$.items", "results.$": "$.results"},
+      "End": true
+    },
+    "TooManyFailures": {"Type": "Fail", "Error": "BatchRejected", "Cause": "More than 25% of items failed analysis."}
+  }
+}
